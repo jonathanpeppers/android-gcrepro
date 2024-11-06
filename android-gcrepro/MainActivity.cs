@@ -1,6 +1,7 @@
-using System.Net.Http.Headers;
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Xamarin.Android.Net;
 using Debug = System.Diagnostics.Debug;
 
 namespace android_gcrepro
@@ -66,16 +67,16 @@ namespace android_gcrepro
             }
         }
 
-        readonly HttpClient httpClient = new();
+        readonly HttpClient httpClient = new(new AndroidMessageHandler
+        {
+            AutomaticDecompression = DecompressionMethods.GZip,
+        });
 
         async Task MakeRequest()
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, "https://httpbin.org/json");
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            request.Headers.AcceptEncoding.Add(new StringWithQualityHeaderValue("gzip"));
-
+            var request = new HttpRequestMessage(HttpMethod.Get, "https://httpbin.org/gzip");
             var response = await httpClient.SendAsync(request).ConfigureAwait(false);
-            if (response.StatusCode != System.Net.HttpStatusCode.OK)
+            if (response.StatusCode != HttpStatusCode.OK)
             {
                 Console.WriteLine($"HTTP status: {response.StatusCode}");
                 return;
@@ -83,7 +84,8 @@ namespace android_gcrepro
 
             using var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
             var doc = JsonSerializer.Deserialize<Document>(stream, MyJsonContext.Default.Document);
-            Debug.Assert(doc?.SlideShow?.Title != null);
+            Debug.Assert(doc?.IsGzipped == true);
+            Debug.Assert(doc?.Headers?.Count > 0);
         }
     }
 
@@ -95,14 +97,17 @@ namespace android_gcrepro
 
     class Document
     {
-        [JsonPropertyName("slideshow")]
-        public SlideShow? SlideShow { get; set; }
-    }
+        [JsonPropertyName("gzipped")]
+        public bool IsGzipped { get; set; } = false;
 
-    class SlideShow
-    {
-        [JsonPropertyName("title")]
-        public string? Title { get; set; }
+        [JsonPropertyName("headers")]
+        public Dictionary<string, string>? Headers { get; set; }
+
+        [JsonPropertyName("method")]
+        public string Method { get; set; } = "";
+
+        [JsonPropertyName("origin")]
+        public string? Origin { get; set; }
     }
     
     class Foo : Java.Lang.Object { }
