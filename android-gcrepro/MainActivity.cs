@@ -1,3 +1,5 @@
+using Android.Util;
+using Refit;
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -68,27 +70,40 @@ namespace android_gcrepro
         }
 
         readonly HttpClient httpClient = new(new AndroidMessageHandler
+            {
+                AutomaticDecompression = DecompressionMethods.GZip,
+                // NOTE: This is insecure!!!
+                ServerCertificateCustomValidationCallback = (request, certificate, chain, sslPolicyErrors) => true
+            })
         {
-            AutomaticDecompression = DecompressionMethods.GZip,
-            // NOTE: This is insecure!!!
-            ServerCertificateCustomValidationCallback = (request, certificate, chain, sslPolicyErrors) => true
-        });
+            BaseAddress = new Uri("https://httpbin.org"),
+        };
 
         async Task MakeRequest()
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, "https://httpbin.org/gzip");
-            var response = await httpClient.SendAsync(request).ConfigureAwait(false);
-            if (response.StatusCode != HttpStatusCode.OK)
+            try
             {
-                Console.WriteLine($"HTTP status: {response.StatusCode}");
-                return;
+                var api = RestService.For<IGzipApi>(httpClient);
+                var doc = await api.GetGzip();
+                Debug.Assert(doc?.IsGzipped == true);
+                Debug.Assert(doc?.Headers?.Count > 0);
             }
-
-            using var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
-            var doc = JsonSerializer.Deserialize<Document>(stream, MyJsonContext.Default.Document);
-            Debug.Assert(doc?.IsGzipped == true);
-            Debug.Assert(doc?.Headers?.Count > 0);
+            catch (ApiException exc)
+            {
+                if (exc.StatusCode != HttpStatusCode.OK)
+                {
+                    Console.WriteLine(exc);
+                    return;
+                }
+                throw;
+            }
         }
+    }
+
+    public interface IGzipApi
+    {
+        [Get("/gzip")]
+        Task<Document> GetGzip();
     }
 
     [JsonSourceGenerationOptions]
@@ -97,7 +112,7 @@ namespace android_gcrepro
     {
     }
 
-    class Document
+    public class Document
     {
         [JsonPropertyName("gzipped")]
         public bool IsGzipped { get; set; } = false;
