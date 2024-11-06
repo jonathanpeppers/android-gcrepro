@@ -70,6 +70,8 @@ namespace android_gcrepro
         readonly HttpClient httpClient = new(new AndroidMessageHandler
         {
             AutomaticDecompression = DecompressionMethods.GZip,
+            // NOTE: This is insecure!!!
+            ServerCertificateCustomValidationCallback = (request, certificate, chain, sslPolicyErrors) => true
         });
 
         async Task MakeRequest()
