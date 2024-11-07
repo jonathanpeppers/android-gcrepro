@@ -1,7 +1,5 @@
-using Android.Util;
 using Refit;
 using System.Net;
-using System.Text.Json;
 using System.Text.Json.Serialization;
 using Xamarin.Android.Net;
 using Debug = System.Diagnostics.Debug;
@@ -76,20 +74,23 @@ namespace android_gcrepro
                 ServerCertificateCustomValidationCallback = (request, certificate, chain, sslPolicyErrors) => true
             })
         {
-            BaseAddress = new Uri("https://httpbin.org"),
+            BaseAddress = new Uri("https://raw.githubusercontent.com/"),
         };
 
         async Task MakeRequest()
         {
             try
             {
-                var api = RestService.For<IGzipApi>(httpClient);
-                var doc = await api.GetGzip();
-                Debug.Assert(doc?.IsGzipped == true);
-                Debug.Assert(doc?.Headers?.Count > 0);
+                var api = RestService.For<IMyApi>(httpClient);
+                var docs = await api.GetDocuments()!;
+                Debug.Assert(docs.Length > 0);
+                Debug.Assert(!string.IsNullOrEmpty(docs[0].Id));
+                Debug.Assert(!string.IsNullOrEmpty(docs[0].Type));
+                Debug.Assert(docs[0].IsPublic);
             }
             catch (ApiException exc)
             {
+                // Occasionally we get HttpStatusCode.BadGateway
                 if (exc.StatusCode != HttpStatusCode.OK)
                 {
                     Console.WriteLine(exc);
@@ -100,31 +101,28 @@ namespace android_gcrepro
         }
     }
 
-    public interface IGzipApi
+    public interface IMyApi
     {
-        [Get("/gzip")]
-        Task<Document> GetGzip();
+        [Get("/json-iterator/test-data/refs/heads/master/large-file.json")]
+        Task<Document[]> GetDocuments();
     }
 
     [JsonSourceGenerationOptions]
-    [JsonSerializable(typeof(Document))]
+    [JsonSerializable(typeof(Document[]))]
     partial class MyJsonContext : JsonSerializerContext
     {
     }
 
     public class Document
     {
-        [JsonPropertyName("gzipped")]
-        public bool IsGzipped { get; set; } = false;
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = "";
 
-        [JsonPropertyName("headers")]
-        public Dictionary<string, string>? Headers { get; set; }
+        [JsonPropertyName("type")]
+        public string Type { get; set; } = "";
 
-        [JsonPropertyName("method")]
-        public string Method { get; set; } = "";
-
-        [JsonPropertyName("origin")]
-        public string? Origin { get; set; }
+        [JsonPropertyName("public")]
+        public bool IsPublic { get; set; }
     }
     
     class Foo : Java.Lang.Object { }
